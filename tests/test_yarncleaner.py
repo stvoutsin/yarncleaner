@@ -1,14 +1,16 @@
+"""
+Tests for YarnCleaner
+"""
+import os
 import unittest
-from unittest.mock import Mock, patch
-import paramiko
-from yarncleaner import YarnCleaner
 import tempfile
-from unittest.mock import patch, Mock
-from paramiko import SSHClient
-import os, subprocess
+from yarncleaner import YarnCleaner
+
 
 class TestYarnCleaner(unittest.TestCase):
-
+    """
+    Test Yarn Cleaner class
+    """
     def setUp(self):
         self.tmp_ssh_key_file = tempfile.NamedTemporaryFile(delete=False)
         self.tmp_ssh_key_file.write(b"ssh-private-key")
@@ -16,11 +18,22 @@ class TestYarnCleaner(unittest.TestCase):
 
     def tearDown(self):
         os.unlink(self.tmp_ssh_key_file.name)
-        yc = YarnCleaner(threshold_percent=75, usercache_dir="/data/usercache", workers=["worker1", "worker2"])
 
-    def test_init(self):
-        yc = YarnCleaner(threshold_percent=75, usercache_dir="/data/usercache", workers=["worker1", "worker2"])
-        self.assertEqual(yc.threshold_percent, 75)
-        self.assertEqual(yc.usercache_dir, "/data/usercache")
-        self.assertEqual(yc.workers, ["worker1", "worker2"])
+    def test_init_1(self):
+        """
+        Test the initialization of YarnCleaner
+        """
+        ycleaner = YarnCleaner(usercache_dir="/data/usercache", workers=["worker1", "worker2"],
+                               ssh_key_file=self.tmp_ssh_key_file, ssh_username="ssh-private-key")
+        self.assertEqual(ycleaner.usercache_dir, "/data/usercache")
+        self.assertEqual(ycleaner.workers, ["worker1", "worker2"])
 
+    def test_init_2(self):
+        """
+        Test the initialization of YarnCleaner with worker param as numbers
+        """
+        ycleaner = YarnCleaner(usercache_dir="/data/usercache", workers=6,
+                               ssh_key_file=self.tmp_ssh_key_file,
+                               ssh_username="ssh-private-key")
+        ycleaner.worker_prefix = "worker"
+        self.assertEqual(ycleaner.workers, ["worker01", "worker02", "worker03", "worker04", "worker05", "worker06"])

@@ -1,13 +1,24 @@
+"""
+This module can be used to monitor and clean the
+temporary directories that are populated during Yarn jobs
+"""
+from __future__ import annotations
 import os
-import subprocess
-import paramiko
 import argparse
+import subprocess
 import logging
+import paramiko
 logging.basicConfig()
 logging.getLogger().setLevel(logging.ERROR)
 
 
 def check_empty_params(func) -> object:
+    """
+    Checks that the params are not empty
+
+    :param func: A function
+    :return: The object
+    """
     def wrapper(*args, **kwargs):
         for arg in args:
             if not arg:
@@ -21,13 +32,40 @@ def check_empty_params(func) -> object:
 
 
 def validate(func) -> object:
+    """
+    Validate params
+
+    :param func: A function
+    :return: object
+    """
     def wrapper(*args, **kwargs):
         for key, val in kwargs.items():
-            if key == "workers" and not type(val) == list:
+            if key == "workers" and (not isinstance(val, list) and not isinstance(val, int)):
                 raise ValueError(f"List expected for 'workers' parameter")
         func(*args, **kwargs)
 
     return wrapper
+
+
+class SSHConnector:
+    """
+    Connect to ssh node to run commands
+    """
+
+    def __init__(self, worker: str, ssh_username: str, ssh_key_file: str) -> None:
+        self.client = paramiko.SSHClient()
+        self.worker = worker
+        self.ssh_username = ssh_username
+        self.ssh_key_file = ssh_key_file
+
+    def __enter__(self):
+        self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.client.connect(self.worker, username=self.ssh_username,
+                            key_filename=self.ssh_key_file)
+        return self.client
+
+    def __exit__(self, *args):
+        self.client.close()
 
 
 class YarnCleaner:
@@ -41,47 +79,86 @@ class YarnCleaner:
 
     @check_empty_params
     @validate
-    def __init__(self, threshold_percent: int = 50, usercache_dir: str = "/var/hadoop/data/usercache",
-                 workers: list = None, ssh_username: str = None, ssh_key_file: str = None) -> None:
-        self.threshold_percent = threshold_percent
+    def __init__(self, workers: list | int, ssh_username: str,
+                 ssh_key_file: str,
+                 usercache_dir: str = "/var/hadoop/data/usercache") -> None:
         self.usercache_dir = usercache_dir
+        self._worker_prefix = "worker"
         self.workers = workers
         self.ssh_username = ssh_username
         self.ssh_key_file = ssh_key_file
 
-    def clean(self):
+    @property
+    def worker_prefix(self):
+        """
+        Get workers prefix
+
+        :return: worker_prefix
+        :rtype: str
+        """
+        return self._worker_prefix
+
+    @worker_prefix.setter
+    def worker_prefix(self, prefix: str):
+        """
+        Set worker prefix str
+
+        :param str prefix : Workers
+        """
+        self._worker_prefix = prefix
+
+    @property
+    def workers(self):
+        """
+        Get workers
+
+        :return: The workers
+         :rtype: list | int
+        """
+        return self._workers
+
+    @workers.setter
+    def workers(self, workers_param: int | list):
+        """
+        Set workers
+        :param int | list workers_param:
+        """
+        def _generate_workers(num: int) -> list:
+            for i in range(1, num+1):
+                res = ""
+                if i < 10:
+                    res = "0"
+                res += str(i)
+                yield f"{self.worker_prefix}{res}"
+
+        if isinstance(workers_param, list):
+            self._workers = workers_param
+        elif isinstance(workers_param, int):
+            self._workers = list(_generate_workers(workers_param))
+        else:
+            raise ValueError(f"Unknown type of workers: {str(type(workers_param))}")
+
+    def clean(self, threshold_percent: int = 50):
         """
         Clean the Yarn temp directory
-
-        Returns:
-             None
+        :param threshold_percent:
+        :type threshold_percent: int
         """
-
-        class SSHConnector:
-            def __init__(self, worker: str, ssh_username: str, ssh_key_file: str) -> None:
-                self.client = paramiko.SSHClient()
-                self.worker = worker
-                self.ssh_username = ssh_username
-                self.ssh_key_file = ssh_key_file
-
-            def __enter__(self):
-                self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                self.client.connect(self.worker, username=self.ssh_username, key_filename=self.ssh_key_file)
-                return self.client
-
-            def __exit__(self, *args):
-                self.client.close()
 
         def get_disk_usage(client: paramiko.SSHClient, path: str) -> int:
             """
             Get the disk usage for a path on a remote host.
 
-            Args:
-                client (paramiko.SSHClient): The SSH client to use.
-                path (str): The path to check.
+            :param client: paramiko.SSHClient
+                The SSH client to use. The client that will
+                be used to connect to the remote host.
+            :param path: str
+                The path to check. The path on the remote host
+                to check for disk usage.
 
-            Returns:
-                int: The disk usage as a percentage.
+            :return: int
+                The disk usage as a percentage.
+                The percentage of disk space used on the remote host for the specified path.
             """
             output = run_command(client, self.COMMANDS['df'] % path)
             return int(output.strip().replace('%', ''))
@@ -90,66 +167,58 @@ class YarnCleaner:
             """
             Get the list of usercache directories
 
-            Args:
-                client (paramiko.SSHClient): The SSH client to use.
-                path (str): The base path for the user directories
-
-            Returns:
-
+            :param paramiko.SSHClient client: The SSH client to use.
+            :param str path: The base path for the user directories
+            :return: list
             """
             usercache_dirs = run_command(client, self.COMMANDS["list_dirs"] % path).splitlines()
             return usercache_dirs
 
         def get_application_id(client: paramiko.SSHClient, app_name: str) -> str:
             """
-            Get the application id
+            Get the application ID
 
-            Args:
-                client (paramiko.SSHClient): The SSH client to use.
-                app_name (str): The name of the app.
-
-            Returns:
-                str: The application id
+            :param paramiko.SSHClient client:
+            :param str app_name:
+            :return: The application id
+            :rtype: str
             """
             try:
                 app = run_command(client, self.COMMANDS["get_app_id"] % app_name).strip()
-            except subprocess.CalledProcessError as cpe:
-                logging.error("No Yarn application found with name %s" % app_name)
-                raise cpe
+            except subprocess.CalledProcessError as exc:
+                logging.error("No Yarn application found with name %s", app_name)
+                raise exc
             return app
 
         def kill_application(client: paramiko.SSHClient, app: str) -> None:
             """
             Kill the application with name: app_id
 
-            Args:
-                client (paramiko.SSHClient): The SSH client to use.
-                app (str): The app to delete.
-
-            Returns:
-                None
+            :param paramiko.SSHClient client:
+            :param str app:
             """
-            logging.info("Killing Yarn application %s" % app)
+            logging.info("Killing Yarn application %s", app)
             run_command(client, self.COMMANDS["kill_app"] % app)
-            return
 
         def run_command(client, command):
             """
             Run a shell command on a remote host via SSH and return the output as a string.
 
-            Args:
-                client (paramiko.SSHClient): The SSH client to use.
-                command (str): The command to run.
+            :param paramiko.SSHClient client: The SSH client to use.
+            :param str command: The command to run.
 
-            Returns:
-                str: The output of the command.
+            :return: The output of the command.
+            :rtype: str
+
             """
-            stdin, stdout, stderr = client.exec_command(command)
+            _, stdout, stderr = client.exec_command(command)
+
             output = stdout.read().decode("utf-8").strip()
             error = stderr.read().decode("utf-8").strip()
-            # TODO: Incorrectly getting error for when checking yarn list
+
             if error and len(error) > 0 and "INFO" not in error:
-                raise subprocess.CalledProcessError(returncode=1, cmd=command, output=output, stderr=error)
+                raise subprocess.CalledProcessError(returncode=1,
+                                                    cmd=command, output=output, stderr=error,)
             return output
 
         killed_apps = {}
@@ -160,16 +229,16 @@ class YarnCleaner:
                     user_directories = get_user_directories(ssh_client, self.usercache_dir)
                     # Iterate over the usercache directories
                     for user_dir in filter(lambda x: x not in killed_apps, user_directories):
-                        usercache_path = os.path.join(self.usercache_dir, user_dir)
-                        disk_usage = get_disk_usage(ssh_client, usercache_path)
+                        disk_usage = get_disk_usage(ssh_client,
+                                                    os.path.join(self.usercache_dir, user_dir))
                         # Check if the disk usage is above the threshold
-                        if disk_usage > self.threshold_percent:
+                        if disk_usage > threshold_percent:
                             app_id = get_application_id(ssh_client, "spark-" + user_dir)
                             killed_apps[user_dir] = True
                             kill_application(ssh_client, app_id)
-                            logging.info(f"Application killed: {app_id}")
-                except Exception as e:
-                    logging.exception(e)
+                            logging.info("Application killed: %s", app_id)
+                except subprocess.CalledProcessError as cpe:
+                    logging.exception(cpe)
                     continue
 
         if not killed_apps:
@@ -179,24 +248,27 @@ class YarnCleaner:
 if __name__ == "__main__":
 
     # Define command line arguments
-    parser = argparse.ArgumentParser(description="Monitor disk usage for Yarn applications and kill if necessary")
-    parser.add_argument("--sshuser", type=str, required=True, help="SSH Username for the remote machine")
-    parser.add_argument("--sshkeyfile", type=str, required=True, help="SSH Key file for the remote machine")
-    parser.add_argument("--workers", type=str, required=True, help="Comma-separated list of worker nodes")
-    parser.add_argument("--threshold", type=int, required=True,
+    PARSER = argparse.ArgumentParser(
+        description="Monitor disk usage for Yarn applications and kill if necessary")
+    PARSER.add_argument("--sshuser", type=str, required=True,
+                        help="SSH Username for the remote machine")
+    PARSER.add_argument("--sshkeyfile", type=str,
+                        required=True, help="SSH Key file for the remote machine")
+    PARSER.add_argument("--workers", type=str,
+                        required=True, help="Comma-separated list of worker nodes")
+    PARSER.add_argument("--threshold", type=int, required=True,
                         help="Percentage disk usage threshold that triggers a Yarn kill")
-    parser.add_argument("--usercache_dir", type=str, required=True, help="User cache directory")
+    PARSER.add_argument("--usercache_dir", type=str, required=True, help="User cache directory")
 
     # Parse command line arguments
-    arguments = parser.parse_args()
+    ARGUMENTS = PARSER.parse_args()
 
-    if arguments.workers:
-        workers_list = arguments.workers.split(',')
+    if ARGUMENTS.workers:
+        WORKERS = ARGUMENTS.workers.split(',')
     else:
         raise ValueError("No workers provided")
-    cleaner = YarnCleaner(threshold_percent=arguments.threshold,
-                          ssh_username=arguments.sshuser, ssh_key_file=arguments.sshkeyfile,
-                          workers=workers_list, usercache_dir=arguments.usercache_dir)
+    CLEANER = YarnCleaner(ssh_username=ARGUMENTS.sshuser, ssh_key_file=ARGUMENTS.sshkeyfile,
+                          workers=WORKERS, usercache_dir=ARGUMENTS.usercache_dir)
 
     # Check the disk usage and kill any Yarn applications as necessary
-    cleaner.clean()
+    CLEANER.clean(threshold_percent=ARGUMENTS.threshold)
