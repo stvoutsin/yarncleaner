@@ -1,3 +1,6 @@
+"""
+Setup module for YarnCleaner
+"""
 from setuptools import setup
 
 setup(
