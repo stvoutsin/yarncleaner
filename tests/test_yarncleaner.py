@@ -12,9 +12,9 @@ class TestYarnCleaner(unittest.TestCase):
     Test Yarn Cleaner class
     """
     def setUp(self):
-        self.tmp_ssh_key_file = tempfile.NamedTemporaryFile(delete=False)
-        self.tmp_ssh_key_file.write(b"ssh-private-key")
-        self.tmp_ssh_key_file.close()
+        with  tempfile.NamedTemporaryFile(delete=False) as self.tmp_ssh_key_file:
+            self.tmp_ssh_key_file.write(b"ssh-private-key")
+            self.tmp_ssh_key_file.close()
 
     def tearDown(self):
         os.unlink(self.tmp_ssh_key_file.name)
@@ -36,4 +36,5 @@ class TestYarnCleaner(unittest.TestCase):
                                ssh_key_file=self.tmp_ssh_key_file,
                                ssh_username="ssh-private-key")
         ycleaner.worker_prefix = "worker"
-        self.assertEqual(ycleaner.workers, ["worker01", "worker02", "worker03", "worker04", "worker05", "worker06"])
+        self.assertEqual(ycleaner.workers, ["worker01", "worker02",
+                                            "worker03", "worker04", "worker05", "worker06"])

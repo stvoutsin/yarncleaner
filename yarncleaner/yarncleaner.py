@@ -22,10 +22,10 @@ def check_empty_params(func) -> object:
     def wrapper(*args, **kwargs):
         for arg in args:
             if not arg:
-                raise ValueError(f"Empty parameter passed")
-        for key, val in kwargs.items():
+                raise ValueError("Empty parameter passed")
+        for val in kwargs.values():
             if not val:
-                raise ValueError(f"Empty parameter passed")
+                raise ValueError("Empty parameter passed")
         func(*args, **kwargs)
 
     return wrapper
@@ -41,7 +41,7 @@ def validate(func) -> object:
     def wrapper(*args, **kwargs):
         for key, val in kwargs.items():
             if key == "workers" and (not isinstance(val, list) and not isinstance(val, int)):
-                raise ValueError(f"List expected for 'workers' parameter")
+                raise ValueError("List expected for 'workers' parameter")
         func(*args, **kwargs)
 
     return wrapper
