@@ -3,18 +3,18 @@
 This module can be used to monitor and clean the temporary directories that are populated during Yarn jobs.
 
 
-# Features
+## Features
 
 * Checks disk usage of Yarn and kills the application that is using up more than a given threshold
 * Connects to a remote node via SSH and runs commands
 
-# Prerequisites
+## Prerequisites
 
 * python3
 * paramiko
 * argparse
 
-# Installation
+## Installation
 
 Clone this repository:
 
@@ -28,15 +28,15 @@ Install dependencies:
   
       pip install -r requirements.txt
 
-# Usage
+## Usage
 
 Using the Command Line
 This module can be run from the command line with the following command:
 
-# sh
+### sh
     python yarn_cleaner.py [--workers [WORKERS [WORKERS ...]]] [--ssh-username SSH_USERNAME] [--ssh-key-file SSH_KEY_FILE] [--usercache-dir USERCACHE_DIR] [--threshold-percent THRESHOLD_PERCENT]
 
-# Arguments
+## Arguments
   
 | Argument  | Description |
 | ------------- | ------------- |
@@ -47,7 +47,7 @@ This module can be run from the command line with the following command:
 | --threshold-percent | The percentage of disk usage to trigger a clean  |
       	
   
-# Using the API
+## Using the API
 
 This module can also be used as an API:
   
@@ -59,6 +59,6 @@ This module can also be used as an API:
     cleaner.clean()
 
 
-# License
+## License
 
 This module is licensed under the GNU GENERAL PUBLIC LICENSE.
