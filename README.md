@@ -18,11 +18,11 @@ This module can be used to monitor and clean the temporary directories that are 
 
 Clone this repository:
 
-    git clone https://github.com/<USERNAME>/<REPO_NAME>.git
+    git clone https://github.com/stvoutsin/yarncleaner.git
     
 cd into the repository: 
 
-    cd <REPO_NAME>
+    cd yarncleaner
 
 Install dependencies: 
   
@@ -34,7 +34,7 @@ Using the Command Line
 This module can be run from the command line with the following command:
 
 ### sh
-    python yarn_cleaner.py [--workers [WORKERS [WORKERS ...]]] [--ssh-username SSH_USERNAME] [--ssh-key-file SSH_KEY_FILE] [--usercache-dir USERCACHE_DIR] [--threshold-percent THRESHOLD_PERCENT]
+    python yarncleaner.py [--workers [WORKERS [WORKERS ...]]] [--ssh-username SSH_USERNAME] [--ssh-key-file SSH_KEY_FILE] [--usercache-dir USERCACHE_DIR] [--threshold-percent THRESHOLD_PERCENT]
 
 ## Arguments
   
@@ -51,7 +51,7 @@ This module can be run from the command line with the following command:
 
 This module can also be used as an API:
   
-    from yarn_cleaner import YarnCleaner
+    from yarncleaner import YarnCleaner
     workers = ["worker01", "worker02", "worker03"]
     ssh_username = "username"
     ssh_key_file = "/path/to/key/file.pem"
